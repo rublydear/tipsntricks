@@ -1,0 +1,258 @@
+---
+title: "R Tips and Tricks"
+author: "Gail Gustavson"
+date: "4/22/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+
+### Markdown basics\
+
+End a line with 2 spaces to start a new paragraph  
+End a line with a backslash to make a new line\
+*italics*\
+**bold**\
+# Header 1\
+### Header 2\
+#### Header 3\
+- unordered list\
+1. ordered list\
+tables\
+knitr::kable(data, 
+ caption = "Table with kable")\
+ More info here: [This is a link.] (https://rmarkdown.rstudio.com/docs/articles/rmarkdown.html)
+
+```{}
+library(tufte)
+
+```
+
+# Getting Workspace Ready, Installing packages\
+pacman
+```{}
+if(!require(pacman)) install.packages(pacman)
+pacman::p_load(
+  tidyverse,
+  dplyr, 
+  ggplot2, 
+  readxl, 
+  pander, 
+  scales,
+  lubridate,
+  janitor,
+  here,
+  knitr
+)
+```
+
+# Cleaning and rearranging data\
+
+### Deleting columns\
+select()\
+```{}
+select(-column_name)
+```
+
+[]\
+```{}
+df <- df[-2,]
+```
+
+### Moving columns\
+Move period column to first position\
+```{}
+tpt_national <- tpt_national %>% select(period, everything())
+```
+
+### Arranging in ascending/descending order\
+Arrange period in ascending and then descending order\
+```{}
+tpt_national <- arrange(tpt_national, period)
+tpt_national <- arrange(desc(tpt_national, period))
+```
+
+### Using pivot_longer\
+This example shows how you can use pivot_longer\
+This command puts column titles in a new column called 'age_grp' and puts values in a new column called 'tpt'\
+```{}
+tpt_national_agrp_props <- tpt_national %>%
+  select(period, tpt_less15, tpt_more15) %>%
+  pivot_longer(
+    -c(period), names_to = "age_grp", values_to = "tpt") 
+```
+
+### Handling NAs/missing data\
+Remember, a value can be missing either:\
+- 1. Explicitly - flagged with NA\
+- 2. Implicitly - simply not present in the data\
+- An explicit missing value is the presence of an absence\
+- an implicit missing value is the absence of a presence\
+
+Check for NAs\
+```{}
+any(is.na(tpt))
+```
+Replacing NAs upon data import\
+Specify the values used to represent missing values in your file
+```{}
+read_csv("a,b,c,1,2,.", na = ".")
+```
+
+### Changing variable types\
+Using mutate to recode data to a binary 1/0 outcome\
+```{}
+data_set <- data_set %>% mutate(new_variable = ifelse (variable > 0, 1, 0))
+```
+
+Using mutate to recode a variable into a factor\
+```{}
+data_set <- data_set %>% mutate(variable = factor(variable, levels = 0:1, labels = c("label1", "label2")))
+```
+
+### clean_names()\
+cleans names of data frames so names are unique and consist only of the _ character, numbers, and letters\
+```{}
+tpt <- clean_names(tpt)
+```
+### separate()
+Separating one column into two\
+By default, separate will split values wherever it sees a non-alphanumeric character\
+If you wish to use a specific character to separate a column, you can pass the character to the sep argument\
+```{}
+table3 %>%
+  separate(rate, into = c("cases", "population", sep = "/"))
+```
+
+# Exporting data\
+
+ggsave() to save images, can be png, jpg, others...\
+```{}
+ggsave("figure.png")
+```
+
+write.table() to create .csv tables good for exporting\
+```{}
+write.table(tpt_region_sex, file = "tpt_region_sex.csv",
+            row.names = TRUE,
+            col.names = TRUE,
+            sep = ",")
+```
+
+
+
+# Exploratory analysis\
+
+### Creating summaries\
+```{}
+prop_byregion %>% select(region_prop) %>% summary(region_prop)
+```
+
+
+# Statistical analysis\
+
+### t-test\
+
+Testing for a significant difference between the means of two groups with t-test\
+For continuous variables\
+Example: does age have an effect on heart disease?\
+```{}
+hd_age <- t.test(data_set$age ~ dataset$hd)
+```
+
+### chi-squared test\
+Testing for independence (chi squared test) (comparing the equivalence of two proportions)\
+For categorical variables\
+Example: does sex have an effect on heart disease?\
+```{}
+hd_sex <- chisq.test(data_set$sex, data_set$hd)
+```
+
+### Exploring statistical associations graphically\
+
+Using a boxplot to explore a continuous variable\
+```{}
+ggplot(data = data_set, aes(x = hd, y = age)) + geom_boxplot()
+```
+
+Using a barplot to explore a binary variable\
+```{}
+ggplot(data = data_set, aes(x = variable, fill = sex)) + geom_bar(position = "fill") + ylab("lab")
+```
+
+
+# Regression\
+### Multiple logistic regression using glm()\
+
+To use when we have one binary outcome variable and two or more predicting variables to study the effect that the independent (predicting) variables have on the probability of obtaining a particular value of the dependent variable.\
+The model will also tell us the remaining effect of the dependent variable is after we control/adjust for the effects of the predicting variables.\
+
+Example: What is the effect that maximum heart rate, age, and sex have on the probability that a person will have heart disease in the next year?\
+
+glm() can perform generalized linear models (regressions) on binary outcome data, count data, probability data, proportion data, and many other data types.
+
+```{}
+model <- glm(data = hd_data, family = 'binomial', hd ~ age + sex + thalach)
+```
+
+Extracting useful info from the glm() model output\
+The 'estimate' column in the printed output represents the log OR of the outcome. To convert the values to original OR scale calculate 95% CIs, we can use tidy() from the broom package\
+```{
+library(broom)
+
+tidy_model <- tidy(model)
+
+# calculate OR
+tidy_model$OR <- exp(tidy_model$estimate)
+
+# calculate 95% CI
+tidy_model$lower_CI <- exp(tidy_m$estimate - 1.96 * tidy_m$std.error)
+tidy_model$lower_CI <- exp(tidy_m$estimate + 1.96 * tidy_m$std.error)
+tidy_model$upper_CI
+```
+Predicted probabilities from a glm() model using predict()\
+```{}
+predict(model, dataset, type = "response")
+```
+Create a decision rule using probability 0.5 as cutoff and save the predicted decision into the main data frame\
+```{}
+hd_data$pred_prob <- ifelse(pred_prob >= 0.5, 1, 0)
+```
+Create a newdata data frame to save a new case information\
+```{}
+newdata <- data.frame(age = 45, sex = "Female", thalach = 150)
+```
+Predict probability for this new case and print out the predicted value\
+```{}
+p_new <- predict(model, newdata, type = "response")
+```
+
+### Model performance metrics\
+Are predictions accurate?\
+How well does the model fit our data?\
+```{}
+library(Metrics)
+?Metrics
+```
+Calculate AUC (Area Under the ROC curve)\
+Ranges from 0 to 1; the closer it gets to 1, the better the model performance\
+```{}
+auc <- auc(hd_data$hd, hd_data$pred_hd)
+```
+Calculate Accuracy\
+The proportion of the total number of predictions that were correct\
+```{}
+accuracy <- accuracy(hd_data$hd, hd_data$pred_hd)
+```
+Calculate Classification Error\
+1-Accuracy\
+```{}
+classification_error <- ce(hd_data$hd, hd_data$pred_hd) 
+```
